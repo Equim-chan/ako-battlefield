@@ -3,7 +3,6 @@
 env:
   QUANTITY: "3"
   STOP_FILE: stop
-  STOP_TIMEOUT: 10m
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
 jobs:
   primary:
@@ -105,18 +104,7 @@ jobs:
       run: |
         mv .env akochan-bot
         cd akochan-bot
-
-        stop_timeout() {
-          gsleep "$STOP_TIMEOUT"
-          touch "$STOP_FILE"
-          echo "Touched $STOP_FILE"
-        }
-        stop_timeout &
-
-        while [[ ! -f "$STOP_FILE" ]]; do
-          ./run.sh || true
-          gsleep 30s
-        done
+        ./run.sh || true
     - env:
         ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
         FORM_FILE: logs_s_3v1
@@ -245,18 +233,7 @@ jobs:
       run: |
         mv .env akochan-bot
         cd akochan-bot
-
-        stop_timeout() {
-          gsleep "$STOP_TIMEOUT"
-          touch "$STOP_FILE"
-          echo "Touched $STOP_FILE"
-        }
-        stop_timeout &
-
-        while [[ ! -f "$STOP_FILE" ]]; do
-          ./run.sh || true
-          gsleep 30s
-        done
+        ./run.sh || true
   replica_1:
     name: Replica 1
     runs-on: macos-latest
@@ -356,18 +333,7 @@ jobs:
       run: |
         mv .env akochan-bot
         cd akochan-bot
-
-        stop_timeout() {
-          gsleep "$STOP_TIMEOUT"
-          touch "$STOP_FILE"
-          echo "Touched $STOP_FILE"
-        }
-        stop_timeout &
-
-        while [[ ! -f "$STOP_FILE" ]]; do
-          ./run.sh || true
-          gsleep 30s
-        done
+        ./run.sh || true
 name: Summon Akochan
 "on":
   push:
