@@ -117,6 +117,11 @@ jobs:
           # flushing the disk cache seems to work, too.
           sudo purge
 
+      - &ping_test
+        name: Ping test
+        run: |
+          ping -c 16 "$TENHOU_ENDPOINT" | grep -v "$TENHOU_ENDPOINT" | sed 's/^.*icmp_//g'
+
       - name: Run akochan-bot
         env:
           LOG_FILE: ${{ github.workspace }}/logs.txt
@@ -129,7 +134,6 @@ jobs:
         env:
           ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
           RECYCLE_ENDPOINT: ${{ secrets.RECYCLE_ENDPOINT }}
-          FORM_FILE: logs_s_3v1
         run: |
           touch logs.txt
           curl -X POST \
@@ -150,6 +154,7 @@ jobs:
       - *cache_akochan_bot
       - *build_akochan
       - *build_akochan_bot
+      - *ping_test
       - name: Run akochan-bot
         env:
           NAME: NoName
