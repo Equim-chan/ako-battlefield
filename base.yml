@@ -1,0 +1,189 @@
+name: South 3v1
+
+'on':
+  push:
+    paths:
+      - '.ts'
+
+env:
+  TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
+  STOP_FILE: stop
+  TIMEOUT: 10m
+  QUANTITY: '3'
+
+jobs:
+  primary:
+    name: Primary
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - &update_homebrew
+        name: Update Homebrew
+        run: |
+          brew update --preinstall
+          cat "$(brew --repository)/Library/Taps/homebrew/homebrew-core/Formula/"{gnu-sed,coreutils,boost,websocat}.rb > .github/brew-formulae
+      - &configure_homebrew_cache
+        name: Configure Homebrew cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/Library/Caches/Homebrew/gnu-sed--*
+            ~/Library/Caches/Homebrew/coreutils--*
+            ~/Library/Caches/Homebrew/boost--*
+            ~/Library/Caches/Homebrew/websocat--*
+            ~/Library/Caches/Homebrew/downloads/*--gnu-sed-*
+            ~/Library/Caches/Homebrew/downloads/*--coreutils-*
+            ~/Library/Caches/Homebrew/downloads/*--boost-*
+            ~/Library/Caches/Homebrew/downloads/*--websocat-*
+          key: brew-${{ hashFiles('.github/brew-formulae') }}
+          restore-keys: brew-
+
+      - &environment_preparation
+        name: Environment preparation
+        env:
+          PASSPHRASE: ${{ secrets.AKOCHAN_BOT_PASSPHRASE }}
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          set -x
+
+          git clone --depth=1 https://github.com/critter-mj/akochan.git
+          git --git-dir=akochan/.git rev-parse --short HEAD | tee AKOCHAN_VER
+          mkdir akochan-bot
+          echo "$PASSPHRASE" | gpg -o - -d --batch --yes --passphrase-fd 0 akochan-bot.tar.zst.pgp | gtar -I zstd -C akochan-bot -xf -
+
+          brew install gnu-sed coreutils boost websocat
+
+          sysctl -a | grep machdep.cpu
+          vm_stat
+
+          rustup toolchain update --no-self-update stable
+          rustup default stable
+          rustup show
+
+          rustc --version | tee RUSTC_VER
+          /usr/local/opt/llvm/bin/clang | tee CLANG_VER
+          gnproc | tee NPROC
+
+          /usr/local/opt/llvm/bin/clang++ -E - -march=native -###
+
+      - &cache_akochan
+        name: Cache akochan
+        id: cache-akochan
+        uses: actions/cache@v2
+        with:
+          path: akochan
+          # change it manually when needed
+          key: ${{ runner.os }}-akochan-0-${{ hashFiles('NPROC', 'CLANG_VER', 'AKOCHAN_VER') }}
+      - &cache_akochan_bot
+        name: Cache akochan-bot
+        id: cache-akochan-bot
+        uses: actions/cache@v2
+        with:
+          path: |
+            akochan-bot/target
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          # change it manually when needed
+          key: ${{ runner.os }}-cargo-0-${{ hashFiles('RUSTC_VER') }}-${{ hashFiles('akochan-bot/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-0-${{ hashFiles('RUSTC_VER') }}-
+            ${{ runner.os }}-cargo-0-
+
+      - &build_akochan
+        name: Build akochan
+        if: steps.cache-akochan.outputs.cache-hit != 'true'
+        run: |
+          patch -d akochan --strip=0 < akochan.patch
+          gsed -i \
+            -e 's/CFLAGS =/CFLAGS = -ffast-math/' \
+            akochan/Makefile_MacOS akochan/ai_src/Makefile_MacOS
+          make -C akochan/ai_src -j$(gnproc) -f Makefile_MacOS
+          make -C akochan -j$(gnproc) -f Makefile_MacOS
+
+      - &build_akochan_bot
+        name: Build akochan-bot
+        env:
+          RUSTFLAGS: -C target-cpu=native
+        run: |
+          cd akochan-bot
+          cargo build --release
+
+          # There is a bug with BSD tar on macOS where the first 8MB of the file are
+          # sometimes all NUL bytes. See https://github.com/actions/cache/issues/403
+          # and https://github.com/rust-lang/cargo/issues/8603 for some more
+          # information. An alternative solution here is to install GNU tar, but
+          # flushing the disk cache seems to work, too.
+          sudo purge
+
+      - name: Run akochan-bot
+        env:
+          LOG_FILE: ${{ github.workspace }}/logs.txt
+        run: &run_akochan_bot |
+          mv .env akochan-bot
+          cd akochan-bot
+
+          stop_timeout() {
+            sleep $TIMEOUT
+            touch "$STOP_FILE"
+            echo "Touched $STOP_FILE"
+          }
+          stop_timeout &
+
+          while [[ ! -f "$STOP_FILE" ]]; do
+            ./run.sh || true
+            sleep 30s
+          done
+
+      - name: Upload logs
+        env:
+          LOG_FILE: ${{ github.workspace }}/logs.txt
+          ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
+          RECYCLE_ENDPOINT: ${{ secrets.RECYCLE_ENDPOINT }}
+          FORM_FILE: logs_s_3v1
+        run: |
+          touch logs.txt
+          jq -cn \
+            --argjson quantity "$QUANTITY" \
+            --arg log_text "$(cat "$LOG_FILE")" \
+            '{"quantity":($quantity),"log_text":($log_text)}' \
+            | curl -X POST \
+              -H "Content-Type: application/json; charset=utf-8" \
+              -H "X-ARDW-Token: $ARDW_TOKEN" \
+              "$RECYCLE_ENDPOINT"
+
+  replica_0: &replica
+    name: Replica 0
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - *update_homebrew
+      - *configure_homebrew_cache
+      - *environment_preparation
+      - *cache_akochan
+      - *cache_akochan_bot
+      - *build_akochan
+      - *build_akochan_bot
+      - name: Run akochan-bot
+        env:
+          NAME: NoName
+        run: *run_akochan_bot
+  replica_1:
+    <<: *replica
+    name: Replica 1
+
+  trigger_recycle:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - primary
+      - replica_0
+      - replica_1
+    steps:
+      - name: Upload logs
+        env:
+          ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
+        run: |
+          echo noop
