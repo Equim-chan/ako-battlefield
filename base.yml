@@ -170,7 +170,8 @@ jobs:
     <<: *replica
     name: Replica 1
 
-  trigger_recycle:
+  recycle:
+    name: Recycle
     runs-on: ubuntu-latest
     if: always()
     needs:
@@ -181,6 +182,7 @@ jobs:
       - name: Recycle
         env:
           ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
+          RECYCLE_ENDPOINT: ${{ secrets.RECYCLE_ENDPOINT }}
         run: |
           curl \
             -H "X-ARDW-Token: $ARDW_TOKEN" \
