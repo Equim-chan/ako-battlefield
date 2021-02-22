@@ -1,4 +1,4 @@
-name: South 3v1
+name: Summon Akochan
 
 'on':
   push:
@@ -8,7 +8,7 @@ name: South 3v1
 env:
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
   STOP_FILE: stop
-  TIMEOUT: 10m
+  STOP_TIMEOUT: 10m
   QUANTITY: '3'
 
 jobs:
@@ -126,7 +126,7 @@ jobs:
           cd akochan-bot
 
           stop_timeout() {
-            sleep $TIMEOUT
+            sleep $STOP_TIMEOUT
             touch "$STOP_FILE"
             echo "Touched $STOP_FILE"
           }
