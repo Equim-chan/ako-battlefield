@@ -3,8 +3,8 @@
 env:
   QUANTITY: "3"
   STOP_FILE: stop
+  STOP_TIMEOUT: 10m
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
-  TIMEOUT: 10m
 jobs:
   primary:
     name: Primary
@@ -107,7 +107,7 @@ jobs:
         cd akochan-bot
 
         stop_timeout() {
-          sleep $TIMEOUT
+          sleep $STOP_TIMEOUT
           touch "$STOP_FILE"
           echo "Touched $STOP_FILE"
         }
@@ -129,6 +129,23 @@ jobs:
           -H "Content-Type: text/plain; charset=utf-8" \
           -d "@logs.txt" \
           "$RECYCLE_ENDPOINT"
+  recycle:
+    if: always()
+    name: Recycle
+    needs:
+    - primary
+    - replica_0
+    - replica_1
+    runs-on: ubuntu-latest
+    steps:
+    - env:
+        ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
+        RECYCLE_ENDPOINT: ${{ secrets.RECYCLE_ENDPOINT }}
+      name: Recycle
+      run: |
+        curl \
+          -H "X-ARDW-Token: $ARDW_TOKEN" \
+          "${RECYCLE_ENDPOINT}?quantity=${QUANTITY}"
   replica_0:
     name: Replica 0
     runs-on: macos-latest
@@ -230,7 +247,7 @@ jobs:
         cd akochan-bot
 
         stop_timeout() {
-          sleep $TIMEOUT
+          sleep $STOP_TIMEOUT
           touch "$STOP_FILE"
           echo "Touched $STOP_FILE"
         }
@@ -341,7 +358,7 @@ jobs:
         cd akochan-bot
 
         stop_timeout() {
-          sleep $TIMEOUT
+          sleep $STOP_TIMEOUT
           touch "$STOP_FILE"
           echo "Touched $STOP_FILE"
         }
@@ -351,22 +368,7 @@ jobs:
           ./run.sh || true
           sleep 30s
         done
-  trigger_recycle:
-    if: always()
-    needs:
-    - primary
-    - replica_0
-    - replica_1
-    runs-on: ubuntu-latest
-    steps:
-    - env:
-        ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
-      name: Recycle
-      run: |
-        curl \
-          -H "X-ARDW-Token: $ARDW_TOKEN" \
-          "${RECYCLE_ENDPOINT}?quantity=${QUANTITY}"
-name: South 3v1
+name: Summon Akochan
 "on":
   push:
     paths:
