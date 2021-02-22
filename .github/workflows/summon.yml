@@ -1,7 +1,7 @@
 # Auto generated, DO NOT EDIT.
 
 env:
-  QUANTITY: "1"
+  QUANTITY: "2"
   STOP_FILE: stop
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
 jobs:
@@ -98,9 +98,6 @@ jobs:
         # information. An alternative solution here is to install GNU tar, but
         # flushing the disk cache seems to work, too.
         sudo purge
-    - name: Ping test
-      run: |
-        ping -c 16 "$TENHOU_ENDPOINT" | grep -v "$TENHOU_ENDPOINT" | sed 's/^.*icmp_//g'
     - env:
         LOG_FILE: ${{ github.workspace }}/logs.txt
       name: Run akochan-bot
@@ -124,6 +121,7 @@ jobs:
     name: Recycle
     needs:
     - primary
+    - replica_0
     runs-on: ubuntu-latest
     steps:
     - env:
@@ -134,6 +132,106 @@ jobs:
         curl \
           -H "X-ARDW-Token: $ARDW_TOKEN" \
           "${RECYCLE_ENDPOINT}?quantity=${QUANTITY}"
+  replica_0:
+    name: Replica 0
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Update Homebrew
+      run: |
+        brew update --preinstall
+        cat "$(brew --repository)/Library/Taps/homebrew/homebrew-core/Formula/"{gnu-sed,coreutils,boost,websocat}.rb > .github/brew-formulae
+    - name: Configure Homebrew cache
+      uses: actions/cache@v2
+      with:
+        key: brew-${{ hashFiles('.github/brew-formulae') }}
+        path: |
+          ~/Library/Caches/Homebrew/gnu-sed--*
+          ~/Library/Caches/Homebrew/coreutils--*
+          ~/Library/Caches/Homebrew/boost--*
+          ~/Library/Caches/Homebrew/websocat--*
+          ~/Library/Caches/Homebrew/downloads/*--gnu-sed-*
+          ~/Library/Caches/Homebrew/downloads/*--coreutils-*
+          ~/Library/Caches/Homebrew/downloads/*--boost-*
+          ~/Library/Caches/Homebrew/downloads/*--websocat-*
+        restore-keys: brew-
+    - env:
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+        PASSPHRASE: ${{ secrets.AKOCHAN_BOT_PASSPHRASE }}
+      name: Environment preparation
+      run: |
+        set -x
+
+        git clone --depth=1 https://github.com/critter-mj/akochan.git
+        git --git-dir=akochan/.git rev-parse --short HEAD | tee AKOCHAN_VER
+        mkdir akochan-bot
+        echo "$PASSPHRASE" | gpg -o - -d --batch --yes --passphrase-fd 0 akochan-bot.tar.zst.pgp | gtar -I zstd -C akochan-bot -xf -
+
+        brew install gnu-sed coreutils boost websocat
+
+        sysctl -a | grep machdep.cpu
+        vm_stat
+
+        rustup toolchain update --no-self-update stable
+        rustup default stable
+        rustup show
+
+        rustc --version | tee RUSTC_VER
+        /usr/local/opt/llvm/bin/clang | tee CLANG_VER
+        gnproc | tee NPROC
+
+        /usr/local/opt/llvm/bin/clang++ -E - -march=native -###
+    - id: cache-akochan
+      name: Cache akochan
+      uses: actions/cache@v2
+      with:
+        key: ${{ runner.os }}-akochan-0-${{ hashFiles('NPROC', 'CLANG_VER', 'AKOCHAN_VER')
+          }}
+        path: akochan
+    - id: cache-akochan-bot
+      name: Cache akochan-bot
+      uses: actions/cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-0-${{ hashFiles('RUSTC_VER') }}-${{ hashFiles('akochan-bot/**/Cargo.lock')
+          }}
+        path: |
+          akochan-bot/target
+          ~/.cargo/bin
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+        restore-keys: |
+          ${{ runner.os }}-cargo-0-${{ hashFiles('RUSTC_VER') }}-
+          ${{ runner.os }}-cargo-0-
+    - if: steps.cache-akochan.outputs.cache-hit != 'true'
+      name: Build akochan
+      run: |
+        patch -d akochan --strip=0 < akochan.patch
+        gsed -i \
+          -e 's/CFLAGS =/CFLAGS = -ffast-math/' \
+          akochan/Makefile_MacOS akochan/ai_src/Makefile_MacOS
+        make -C akochan/ai_src -j$(gnproc) -f Makefile_MacOS
+        make -C akochan -j$(gnproc) -f Makefile_MacOS
+    - env:
+        RUSTFLAGS: -C target-cpu=native
+      name: Build akochan-bot
+      run: |
+        cd akochan-bot
+        cargo build --release
+
+        # There is a bug with BSD tar on macOS where the first 8MB of the file are
+        # sometimes all NUL bytes. See https://github.com/actions/cache/issues/403
+        # and https://github.com/rust-lang/cargo/issues/8603 for some more
+        # information. An alternative solution here is to install GNU tar, but
+        # flushing the disk cache seems to work, too.
+        sudo purge
+    - env:
+        NAME: NoName
+      name: Run akochan-bot
+      run: |
+        mv .env akochan-bot
+        cd akochan-bot
+        ./run.sh || true
 name: Summon Akochan
 "on":
   push:
