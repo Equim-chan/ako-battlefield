@@ -139,20 +139,16 @@ jobs:
 
       - name: Upload logs
         env:
-          LOG_FILE: ${{ github.workspace }}/logs.txt
           ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
           RECYCLE_ENDPOINT: ${{ secrets.RECYCLE_ENDPOINT }}
           FORM_FILE: logs_s_3v1
         run: |
           touch logs.txt
-          jq -cn \
-            --argjson quantity "$QUANTITY" \
-            --arg log_text "$(cat "$LOG_FILE")" \
-            '{"quantity":($quantity),"log_text":($log_text)}' \
-            | curl -X POST \
-              -H "Content-Type: application/json; charset=utf-8" \
-              -H "X-ARDW-Token: $ARDW_TOKEN" \
-              "$RECYCLE_ENDPOINT"
+          curl -X POST \
+            -H "X-ARDW-Token: $ARDW_TOKEN" \
+            -H "Content-Type: text/plain; charset=utf-8" \
+            -d "@logs.txt" \
+            "$RECYCLE_ENDPOINT"
 
   replica_0: &replica
     name: Replica 0
@@ -182,8 +178,10 @@ jobs:
       - replica_0
       - replica_1
     steps:
-      - name: Upload logs
+      - name: Recycle
         env:
           ARDW_TOKEN: ${{ secrets.ARDW_TOKEN }}
         run: |
-          echo noop
+          curl \
+            -H "X-ARDW-Token: $ARDW_TOKEN" \
+            "${RECYCLE_ENDPOINT}?quantity=${QUANTITY}"
