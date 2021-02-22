@@ -8,7 +8,6 @@ name: Summon Akochan
 env:
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
   STOP_FILE: stop
-  STOP_TIMEOUT: 10m
   QUANTITY: '3'
 
 jobs:
@@ -124,18 +123,7 @@ jobs:
         run: &run_akochan_bot |
           mv .env akochan-bot
           cd akochan-bot
-
-          stop_timeout() {
-            gsleep "$STOP_TIMEOUT"
-            touch "$STOP_FILE"
-            echo "Touched $STOP_FILE"
-          }
-          stop_timeout &
-
-          while [[ ! -f "$STOP_FILE" ]]; do
-            ./run.sh || true
-            gsleep 30s
-          done
+          ./run.sh || true
 
       - name: Upload logs
         env:
