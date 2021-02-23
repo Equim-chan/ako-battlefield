@@ -7,7 +7,6 @@ name: Summon Akochan
 
 env:
   TENHOU_ENDPOINT: ${{ secrets.TENHOU_ENDPOINT }}
-  STOP_FILE: stop
   QUANTITY: '3'
 
 jobs:
@@ -150,8 +149,6 @@ jobs:
       - *build_akochan
       - *build_akochan_bot
       - name: Run akochan-bot
-        env:
-          NAME: NoName
         run: *run_akochan_bot
   replica_1:
     <<: *replica
